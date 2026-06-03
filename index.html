@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>журнал piece</title>
+  <meta name="description" content="Рукописный журнал проекта piece — что сделали, что нашли, что поняли." />
+  <meta name="theme-color" content="#15120f" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Marck+Script&family=JetBrains+Mono&display=swap"
+    rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <span class="pill" id="counter">обложка</span>
+  </div>
+
+  <button class="nav nav--prev" id="prev" aria-label="Назад">‹</button>
+  <button class="nav nav--next" id="next" aria-label="Вперёд">›</button>
+
+  <div class="viewport">
+    <div class="book" id="book">
+      <div class="stage" id="stage"></div>
+    </div>
+  </div>
+
+  <div class="progress" id="progress"></div>
+
+  <button class="fab" id="fab" aria-label="Записать">
+    <span aria-hidden="true">✎</span>
+    <span>Записать</span>
+  </button>
+
+  <!-- composer -->
+  <div class="composer-backdrop" id="composer-backdrop">
+    <div class="composer" role="dialog" aria-modal="true" aria-label="Новая запись">
+      <h2>Новая запись</h2>
+      <div class="row">
+        <div class="col">
+          <label for="c-author">Автор</label>
+          <select id="c-author">
+            <option value="alex">Алекс</option>
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+          </select>
+        </div>
+        <div class="col" style="flex: 2">
+          <label for="c-title">Заголовок</label>
+          <input id="c-title" type="text" placeholder="например: запустили блокнот" />
+        </div>
+      </div>
+      <label for="c-body">Что сделали / что нашли</label>
+      <textarea id="c-body" placeholder="Пиши простыми словами, как себе в тетрадь…"></textarea>
+      <div class="actions">
+        <button class="btn btn--ghost" id="c-cancel">Отмена</button>
+        <button class="btn btn--primary" id="c-save">Сохранить</button>
+        <button class="btn btn--gh" id="c-github">Добавить в журнал на GitHub</button>
+      </div>
+      <div class="hint">
+        «Сохранить» — запись появится сразу на этом устройстве (черновик).
+        «Добавить на GitHub» — откроет готовый файл, останется нажать Commit,
+        и запись увидят все.
+      </div>
+    </div>
+  </div>
+
+  <div class="flash" id="flash"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
