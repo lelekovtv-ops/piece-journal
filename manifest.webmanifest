@@ -1,0 +1,17 @@
+{
+  "name": "журнал piece",
+  "short_name": "журнал",
+  "description": "Рукописный журнал проекта piece — что сделали, что нашли, что поняли.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15120f",
+  "theme_color": "#15120f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -311,10 +311,38 @@ const MONTHS = [
   "янв", "фев", "мар", "апр", "мая", "июн",
   "июл", "авг", "сен", "окт", "ноя", "дек",
 ];
-function formatDate(iso) {
+const MONTHS_GEN = [
+  "января", "февраля", "марта", "апреля", "мая", "июня",
+  "июля", "августа", "сентября", "октября", "ноября", "декабря",
+];
+const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+
+function dateParts(iso) {
   const m = (iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return iso || "";
-  return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
+  return m ? { y: +m[1], mo: +m[2], d: +m[3] } : null;
+}
+function formatDate(iso) {
+  const p = dateParts(iso);
+  return p ? `${p.d} ${MONTHS[p.mo - 1]} ${p.y}` : (iso || "");
+}
+function formatDateLong(iso) {
+  const p = dateParts(iso);
+  return p ? `${p.d} ${MONTHS_GEN[p.mo - 1]} ${p.y}` : (iso || "");
+}
+function weekdayShort(iso) {
+  const p = dateParts(iso);
+  if (!p) return "";
+  return WEEKDAYS[new Date(p.y, p.mo - 1, p.d).getDay()];
+}
+function dateKey(iso) {
+  const p = dateParts(iso);
+  return p ? p.y * 10000 + p.mo * 100 + p.d : 0;
+}
+function pluralRu(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
 }
 
 // Build the flat list of measurable blocks for one entry.
@@ -371,13 +399,19 @@ function paginate(entries) {
 
   const pages = [];
   let cur = [];
-  const flushPage = () => { if (cur.length) pages.push(cur); cur = []; content.innerHTML = ""; };
+  let pageDate = null;
+  const flushPage = () => { if (cur.length) pages.push(cur); cur = []; content.innerHTML = ""; pageDate = null; };
 
   for (let ei = 0; ei < entries.length; ei++) {
     const entry = entries[ei];
     const ink = AUTHOR_INK[entry.author] || "var(--ink)";
 
-    // spacer before an entry (never as the first block on a page)
+    // diary style: each new day begins on a fresh page
+    if (cur.length && entry.date && pageDate && entry.date !== pageDate) {
+      flushPage();
+    }
+
+    // spacer before an entry that shares the page (same day)
     if (cur.length) {
       const gap = document.createElement("div");
       gap.className = "entry-gap";
@@ -385,6 +419,8 @@ function paginate(entries) {
       if (!fits()) { content.removeChild(gap); flushPage(); }
       else cur.push(gap);
     }
+
+    pageDate = entry.date || pageDate;
 
     const blocks = entryBlocks(entry);
     for (let bi = 0; bi < blocks.length; bi++) {
@@ -394,6 +430,7 @@ function paginate(entries) {
       if (!fits() && cur.length) {
         content.removeChild(block);
         flushPage();
+        pageDate = entry.date || null; // a spilled entry keeps its day
         // continued marker when an entry spills past a page boundary
         if (bi > 0) {
           const cont = entryHeadEl(entry, true);
@@ -444,7 +481,7 @@ function buildCover(total) {
   return page;
 }
 
-function buildContentPage(blocks, pageNo, key) {
+function buildContentPage(blocks, pageNo, key, date) {
   const page = document.createElement("div");
   page.className = "page";
 
@@ -452,6 +489,13 @@ function buildContentPage(blocks, pageNo, key) {
   paper.className = "paper paper--ruled";
 
   paper.appendChild(spiralEl());
+
+  if (date) {
+    const tab = document.createElement("div");
+    tab.className = "page-date";
+    tab.innerHTML = `<span class="wd">${weekdayShort(date)}</span>${formatDateLong(date)}`;
+    paper.appendChild(tab);
+  }
 
   const content = document.createElement("div");
   content.className = "content ruled";
@@ -526,6 +570,8 @@ function blankPaper() {
 const stage = document.getElementById("stage");
 const book = document.getElementById("book");
 let pagesEls = [];
+let pageMeta = [];   // aligned with pagesEls: { kind: 'cover'|'entry'|'free', date }
+let dateIndex = [];  // [{ date, page, count }] sorted ascending
 let current = 0;
 let flipping = false;
 
@@ -622,12 +668,97 @@ const progress = document.getElementById("progress");
 function updateChrome() {
   prevBtn.disabled = current === 0;
   nextBtn.disabled = current === pagesEls.length - 1;
-  counter.textContent = current === 0
-    ? "обложка"
-    : `стр. ${current} из ${pagesEls.length - 1}`;
+
+  const m = pageMeta[current] || {};
+  let label;
+  if (m.kind === "cover") label = "обложка";
+  else if (m.kind === "free") label = "чистый лист";
+  else label = m.date ? formatDateLong(m.date) : `страница ${current}`;
+  counter.textContent = label;
+
   [...progress.children].forEach((dot, i) => {
     dot.classList.toggle("active", i === current);
   });
+  updateDateUI();
+}
+
+/* ----------------------------------------------------- date navigation */
+
+function goToPage(idx) {
+  if (idx == null || idx < 0 || idx >= pagesEls.length || idx === current || flipping) return;
+  goTo(idx, idx > current ? "next" : "prev");
+}
+
+function jumpToDate(iso) {
+  if (!iso || !dateIndex.length) return;
+  let target = dateIndex.find((d) => d.date === iso);
+  if (!target) {
+    const k = dateKey(iso);
+    target = dateIndex.reduce(
+      (best, d) => (Math.abs(dateKey(d.date) - k) < Math.abs(dateKey(best.date) - k) ? d : best),
+      dateIndex[0]
+    );
+  }
+  goToPage(target.page);
+  closeDatePop();
+}
+
+function buildDateList() {
+  const list = document.getElementById("date-list");
+  list.innerHTML = "";
+  if (!dateIndex.length) {
+    const empty = document.createElement("div");
+    empty.className = "date-pop-foot";
+    empty.textContent = "Записей по датам пока нет";
+    list.appendChild(empty);
+  }
+  dateIndex.forEach((d) => {
+    const row = document.createElement("button");
+    row.className = "date-row";
+    row.dataset.page = d.page;
+    const cnt = `${d.count} ${pluralRu(d.count, "запись", "записи", "записей")}`;
+    row.innerHTML = `<span>${formatDateLong(d.date)}</span><span class="count">${cnt}</span>`;
+    row.addEventListener("click", () => { goToPage(d.page); closeDatePop(); });
+    list.appendChild(row);
+  });
+
+  const di = document.getElementById("date-input");
+  if (dateIndex.length) {
+    di.min = dateIndex[0].date;
+    di.max = dateIndex[dateIndex.length - 1].date;
+  }
+}
+
+function updateDateUI() {
+  const m = pageMeta[current] || {};
+  const di = document.getElementById("date-input");
+  if (di && m.date) di.value = m.date;
+  const foot = document.getElementById("date-foot");
+  if (foot) foot.textContent = pagesEls.length > 1 ? `страница ${current} из ${pagesEls.length - 1}` : "";
+  document.querySelectorAll(".date-row").forEach((r, i) => {
+    r.classList.toggle("current", !!(dateIndex[i] && dateIndex[i].date === m.date));
+  });
+}
+
+function closeDatePop() {
+  const pop = document.getElementById("date-pop");
+  const btn = document.getElementById("date-btn");
+  pop.classList.remove("open");
+  btn.setAttribute("aria-expanded", "false");
+}
+
+function bindDates() {
+  const btn = document.getElementById("date-btn");
+  const pop = document.getElementById("date-pop");
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = pop.classList.toggle("open");
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("click", (e) => {
+    if (!pop.contains(e.target) && !btn.contains(e.target)) closeDatePop();
+  });
+  document.getElementById("date-input").addEventListener("change", (e) => jumpToDate(e.target.value));
 }
 
 function buildProgress() {
@@ -1094,18 +1225,44 @@ async function rebuild(keepPosition) {
   const entries = await loadEntries();
   const contentPages = paginate(entries);
 
+  const idToDate = {};
+  entries.forEach((e) => { idToDate[e.id] = e.date; });
+
   pagesEls = [buildCover(contentPages.length)];
+  pageMeta = [{ kind: "cover" }];
   let pageNo = 0;
   contentPages.forEach((blocks, i) => {
     pageNo += 1;
-    pagesEls.push(buildContentPage(blocks, pageNo, "page-" + (i + 1)));
+    const withId = blocks.find((b) => b && b.dataset && b.dataset.entryId);
+    const date = withId ? (idToDate[withId.dataset.entryId] || "") : "";
+    pagesEls.push(buildContentPage(blocks, pageNo, "page-" + (i + 1), date));
+    pageMeta.push({ kind: "entry", date });
   });
 
   const freeCount = cache.get("journal:freePages") ?? 1;
   for (let k = 1; k <= freeCount; k++) {
     pageNo += 1;
     pagesEls.push(buildFreePage(k, pageNo));
+    pageMeta.push({ kind: "free" });
   }
+
+  // index of unique dates → first page that contains any entry of that date
+  // (scans every block, so a date sharing a page is not skipped)
+  const firstPage = new Map();
+  contentPages.forEach((blocks, i) => {
+    const pageIdx = i + 1; // pagesEls index (cover is 0)
+    for (const b of blocks) {
+      const id = b && b.dataset && b.dataset.entryId;
+      const date = id && idToDate[id];
+      if (date && !firstPage.has(date)) firstPage.set(date, pageIdx);
+    }
+  });
+  const counts = new Map();
+  entries.forEach((e) => { if (e.date) counts.set(e.date, (counts.get(e.date) || 0) + 1); });
+  dateIndex = [...firstPage.entries()]
+    .map(([date, page]) => ({ date, page, count: counts.get(date) || 0 }))
+    .sort((a, b) => dateKey(a.date) - dateKey(b.date));
+  buildDateList();
 
   current = keepPosition ? Math.min(prevIndex, pagesEls.length - 1) : 0;
   buildProgress();
@@ -1121,7 +1278,12 @@ async function init() {
   bindInput();
   bindComposer();
   bindTools();
+  bindDates();
   await rebuild(false);
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => { /* offline support is optional */ });
+  }
 }
 
 init();

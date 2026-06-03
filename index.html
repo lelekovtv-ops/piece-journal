@@ -7,6 +7,15 @@
   <meta name="description" content="Рукописный журнал проекта piece — что сделали, что нашли, что поняли." />
   <meta name="theme-color" content="#15120f" />
 
+  <!-- installable app (Add to Home Screen on iPhone / Android) -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="журнал" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -17,7 +26,18 @@
 </head>
 <body>
   <div class="topbar">
-    <span class="pill" id="counter">обложка</span>
+    <button class="pill pill--date" id="date-btn" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
+      <span id="counter">обложка</span>
+    </button>
+    <div class="date-pop" id="date-pop">
+      <div class="date-pop-head">
+        <span>Перейти к дате</span>
+        <input type="date" id="date-input" />
+      </div>
+      <div class="date-list" id="date-list"></div>
+      <div class="date-pop-foot" id="date-foot"></div>
+    </div>
   </div>
 
   <button class="nav nav--prev" id="prev" aria-label="Назад">‹</button>

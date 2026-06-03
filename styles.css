@@ -560,13 +560,121 @@ html, body {
   pointer-events: auto;
   font-size: 19px;
   letter-spacing: 0.5px;
-  color: #e9dcc2;
-  background: rgba(255, 252, 245, 0.08);
-  border: 1px solid rgba(255, 252, 245, 0.12);
+  color: #f1e7d0;
+  background: rgba(24, 19, 14, 0.62);
+  border: 1px solid rgba(255, 252, 245, 0.16);
   padding: 6px 16px;
   border-radius: 999px;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
+
+.pill--date {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.pill--date:hover { background: rgba(255, 252, 245, 0.16); }
+.pill--date svg { width: 17px; height: 17px; opacity: 0.85; }
+.pill--date #counter { font-size: 22px; }
+
+.date-pop {
+  pointer-events: auto;
+  position: absolute;
+  top: 46px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  width: min(320px, 86vw);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #2a2622, #1b1814);
+  border: 1px solid rgba(255, 252, 245, 0.14);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  padding: 12px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s, transform 0.18s, visibility 0.18s;
+  z-index: 30;
+}
+.date-pop.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.date-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #cbbfa6;
+  font-size: 19px;
+  margin-bottom: 8px;
+}
+.date-pop-head input[type="date"] {
+  font-family: inherit;
+  font-size: 16px;
+  color: #f0e6cf;
+  background: rgba(255, 252, 245, 0.08);
+  border: 1px solid rgba(255, 252, 245, 0.16);
+  border-radius: 8px;
+  padding: 4px 8px;
+  color-scheme: dark;
+}
+
+.date-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.date-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 21px;
+  color: #ece0c6;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.date-row:hover { background: rgba(255, 252, 245, 0.10); }
+.date-row.current { background: rgba(240, 227, 200, 0.16); }
+.date-row .count { font-size: 16px; color: #9b906f; }
+
+.date-pop-foot {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 252, 245, 0.10);
+  font-size: 15px;
+  color: #9b906f;
+  text-align: center;
+}
+
+/* dated corner tab at the top of a page (like a diary) */
+.page-date {
+  position: absolute;
+  top: 74px;
+  right: 56px;
+  z-index: 3;
+  font-size: 21px;
+  color: var(--ink-muted);
+  letter-spacing: 0.5px;
+  text-align: right;
+}
+.page-date .wd { font-size: 17px; opacity: 0.8; margin-right: 6px; text-transform: lowercase; }
 
 .progress {
   position: fixed;
