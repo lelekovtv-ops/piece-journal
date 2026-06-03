@@ -108,7 +108,7 @@ function draw(S) {
   return buf;
 }
 
-for (const size of [512, 192, 180]) {
+for (const size of [1024, 512, 192, 180]) {
   const png = encodePng(size, draw(size));
   writeFileSync(join(OUT, `icon-${size}.png`), png);
   console.log(`icon-${size}.png  ${png.length} bytes`);
