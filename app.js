@@ -444,7 +444,7 @@ function buildCover(total) {
   return page;
 }
 
-function buildContentPage(blocks, pageNo, totalPages) {
+function buildContentPage(blocks, pageNo, key) {
   const page = document.createElement("div");
   page.className = "page";
 
@@ -458,6 +458,8 @@ function buildContentPage(blocks, pageNo, totalPages) {
   for (const b of blocks) content.appendChild(b);
   paper.appendChild(content);
 
+  paper.appendChild(buildAnnotLayer(key));
+
   const folio = document.createElement("div");
   folio.className = "folio";
   folio.textContent = `— ${pageNo} —`;
@@ -469,7 +471,43 @@ function buildContentPage(blocks, pageNo, totalPages) {
   paper.appendChild(wm);
 
   page.appendChild(paper);
-  void totalPages;
+  return page;
+}
+
+// A blank ruled page that exists only to be written and drawn on by hand.
+function buildFreePage(idx, pageNo) {
+  const page = document.createElement("div");
+  page.className = "page";
+
+  const paper = document.createElement("div");
+  paper.className = "paper paper--ruled";
+  paper.appendChild(spiralEl());
+
+  const content = document.createElement("div");
+  content.className = "content ruled";
+  paper.appendChild(content);
+
+  const key = "free-" + idx;
+  if (!getAnnot(key).length) {
+    const hint = document.createElement("div");
+    hint.className = "free-hint";
+    hint.textContent = "поставь курсор и пиши · возьми фломастер и обведи";
+    content.appendChild(hint);
+  }
+
+  paper.appendChild(buildAnnotLayer(key));
+
+  const folio = document.createElement("div");
+  folio.className = "folio";
+  folio.textContent = `— ${pageNo} —`;
+  paper.appendChild(folio);
+
+  const wm = document.createElement("div");
+  wm.className = "watermark";
+  wm.textContent = "piece";
+  paper.appendChild(wm);
+
+  page.appendChild(paper);
   return page;
 }
 
@@ -496,6 +534,7 @@ function showStatic(idx) {
   const el = pagesEls[idx];
   el.style.zIndex = "";
   stage.appendChild(el);
+  applyToolToCurrent();
 }
 
 function goTo(target, dir) {
@@ -626,6 +665,7 @@ function bindInput() {
 
   window.addEventListener("keydown", (e) => {
     if (composerOpen()) return;
+    if (document.activeElement && document.activeElement.isContentEditable) return;
     if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " ") {
       e.preventDefault(); next();
     } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
@@ -636,11 +676,12 @@ function bindInput() {
   let sx = 0, sy = 0, tracking = false;
   const surface = document.querySelector(".viewport");
   surface.addEventListener("touchstart", (e) => {
+    if (currentTool !== "flip") return; // let a tool capture the gesture
     if (e.touches.length !== 1) return;
     sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking = true;
   }, { passive: true });
   surface.addEventListener("touchend", (e) => {
-    if (!tracking) return;
+    if (!tracking || currentTool !== "flip") { tracking = false; return; }
     tracking = false;
     const t = e.changedTouches[0];
     const dx = t.clientX - sx, dy = t.clientY - sy;
@@ -756,6 +797,296 @@ function flash(msg) {
   flashTimer = setTimeout(() => el.classList.remove("show"), 2200);
 }
 
+/* -------------------------------------------------- tools & annotations */
+/* Direct, tactile writing: pick a tool, click on the page and write by hand,
+ * or take the marker and circle/underline. Everything is stored per page in
+ * localStorage (personal to this device). Coordinates live in the fixed
+ * logical page space (760x1010), so they scale with the page. */
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const LOGICAL_W = 760;
+const LOGICAL_H = 1010;
+const CONTENT_TOP = 102; // matches .content top in styles.css
+const RULE = 40;         // ruled-line spacing
+
+const MARKER_COLORS = ["#c0392b", "#2c6fbb", "#e1a100", "#2f8f4e", "#222222"];
+let currentTool = "flip"; // flip | pen | marker | eraser
+let currentColor = MARKER_COLORS[0];
+
+function getAnnot(key) { return cache.get("journal:annot:" + key) || []; }
+function setAnnot(key, items) { cache.set("journal:annot:" + key, items); }
+function persistLayer(layer) { setAnnot(layer.dataset.key, layer._items); }
+
+function buildAnnotLayer(key) {
+  const layer = document.createElement("div");
+  layer.className = "annot-layer";
+  layer.dataset.key = key;
+  layer._items = getAnnot(key);
+
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("class", "annot-svg");
+  svg.setAttribute("viewBox", `0 0 ${LOGICAL_W} ${LOGICAL_H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+
+  const notes = document.createElement("div");
+  notes.className = "annot-notes";
+
+  layer.append(svg, notes);
+  renderAnnot(layer);
+  attachAnnotHandlers(layer);
+  return layer;
+}
+
+function strokeEl(color, width) {
+  const path = document.createElementNS(SVGNS, "path");
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", width);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  return path;
+}
+
+function updatePath(path, pts) {
+  path.setAttribute("d", pts.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" "));
+}
+
+function textNote(it) {
+  const el = document.createElement("div");
+  el.className = "annot-note";
+  el.style.left = it.x + "px";
+  el.style.top = it.y + "px";
+  el.style.color = it.color || currentColor;
+  el.style.maxWidth = Math.max(80, LOGICAL_W - it.x - 40) + "px";
+  el.textContent = it.text || "";
+
+  el.addEventListener("input", () => {
+    it.text = el.innerText;
+    persistLayer(el.closest(".annot-layer"));
+  });
+  el.addEventListener("blur", () => {
+    const layer = el.closest(".annot-layer");
+    if (!layer) return;
+    it.text = el.innerText.replace(/ /g, " ").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
+    if (!it.text.trim()) {
+      const i = layer._items.indexOf(it);
+      if (i >= 0) layer._items.splice(i, 1);
+    }
+    persistLayer(layer);
+    renderAnnot(layer);
+  });
+  el.addEventListener("keydown", (e) => {
+    e.stopPropagation(); // don't trigger page-flip arrows while writing
+    if (e.key === "Escape") { e.preventDefault(); el.blur(); }
+  });
+  return el;
+}
+
+function renderAnnot(layer) {
+  const svg = layer.querySelector(".annot-svg");
+  const notes = layer.querySelector(".annot-notes");
+  svg.innerHTML = "";
+  notes.innerHTML = "";
+  for (const it of layer._items) {
+    if (it.type === "stroke") {
+      const p = strokeEl(it.color, it.width || 4);
+      updatePath(p, it.points);
+      p._item = it;
+      svg.appendChild(p);
+    } else if (it.type === "text") {
+      const n = textNote(it);
+      n._item = it;
+      n.contentEditable = currentTool === "pen" ? "true" : "false";
+      notes.appendChild(n);
+    }
+  }
+}
+
+function getPoint(e, layer) {
+  const r = layer.getBoundingClientRect();
+  return {
+    x: Math.round((e.clientX - r.left) * (LOGICAL_W / r.width)),
+    y: Math.round((e.clientY - r.top) * (LOGICAL_H / r.height)),
+  };
+}
+
+function snapY(y) {
+  return Math.max(CONTENT_TOP, CONTENT_TOP + Math.round((y - CONTENT_TOP) / RULE) * RULE);
+}
+
+function placeCaretEnd(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function createNote(layer, x, y) {
+  hideHint(layer);
+  const item = { type: "text", x, y, text: "", color: currentColor };
+  layer._items.push(item);
+  renderAnnot(layer);
+  const el = layer.querySelector(".annot-notes").lastElementChild;
+  el.contentEditable = "true";
+  el.focus();
+  placeCaretEnd(el);
+  persistLayer(layer);
+}
+
+function eraseAt(layer, p) {
+  let changed = false;
+  layer.querySelectorAll(".annot-note").forEach((n) => {
+    const x = parseFloat(n.style.left), y = parseFloat(n.style.top);
+    const w = n.offsetWidth, h = n.offsetHeight;
+    if (p.x >= x - 6 && p.x <= x + w + 6 && p.y >= y - 6 && p.y <= y + h + 6) {
+      const i = layer._items.indexOf(n._item);
+      if (i >= 0) { layer._items.splice(i, 1); changed = true; }
+    }
+  });
+  layer.querySelectorAll(".annot-svg path").forEach((path) => {
+    const it = path._item;
+    if (it && it.points.some(([px, py]) => Math.hypot(px - p.x, py - p.y) < 16)) {
+      const i = layer._items.indexOf(it);
+      if (i >= 0) { layer._items.splice(i, 1); changed = true; }
+    }
+  });
+  if (changed) { persistLayer(layer); renderAnnot(layer); }
+}
+
+function attachAnnotHandlers(layer) {
+  let drawing = false, erasing = false, pts = null, livePath = null;
+
+  layer.addEventListener("pointerdown", (e) => {
+    if (currentTool === "flip") return;
+
+    if (currentTool === "pen") {
+      if (e.target.classList.contains("annot-note")) return; // edit existing note
+      e.preventDefault();
+      const p = getPoint(e, layer);
+      createNote(layer, p.x, snapY(p.y));
+      hideHint(layer);
+      return;
+    }
+
+    if (currentTool === "marker") {
+      e.preventDefault();
+      try { layer.setPointerCapture(e.pointerId); } catch { /* non-capturable pointer */ }
+      drawing = true;
+      const p = getPoint(e, layer);
+      pts = [[p.x, p.y]];
+      livePath = strokeEl(currentColor, 4);
+      layer.querySelector(".annot-svg").appendChild(livePath);
+      updatePath(livePath, pts);
+      hideHint(layer);
+      return;
+    }
+
+    if (currentTool === "eraser") {
+      e.preventDefault();
+      try { layer.setPointerCapture(e.pointerId); } catch { /* non-capturable pointer */ }
+      erasing = true;
+      eraseAt(layer, getPoint(e, layer));
+    }
+  });
+
+  layer.addEventListener("pointermove", (e) => {
+    if (drawing) {
+      const p = getPoint(e, layer);
+      pts.push([p.x, p.y]);
+      updatePath(livePath, pts);
+    } else if (erasing) {
+      eraseAt(layer, getPoint(e, layer));
+    }
+  });
+
+  const end = () => {
+    if (drawing) {
+      drawing = false;
+      if (pts && pts.length > 1) {
+        layer._items.push({ type: "stroke", color: currentColor, width: 4, points: pts });
+        persistLayer(layer);
+        renderAnnot(layer); // re-link the committed stroke so it can be erased
+      } else if (livePath) {
+        livePath.remove();
+      }
+      pts = null; livePath = null;
+    }
+    erasing = false;
+  };
+  layer.addEventListener("pointerup", end);
+  layer.addEventListener("pointercancel", end);
+}
+
+function hideHint(layer) {
+  const hint = layer.parentElement && layer.parentElement.querySelector(".free-hint");
+  if (hint) hint.remove();
+}
+
+function currentLayer() {
+  return pagesEls[current] && pagesEls[current].querySelector(".annot-layer");
+}
+
+function applyToolToCurrent() {
+  const layer = currentLayer();
+  if (!layer) return;
+  layer.querySelectorAll(".annot-note").forEach((n) => {
+    n.contentEditable = currentTool === "pen" ? "true" : "false";
+  });
+}
+
+function setTool(name) {
+  currentTool = name;
+  document.querySelectorAll(".tool[data-tool]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tool === name);
+  });
+  document.getElementById("tool-colors").classList.toggle("show", name === "pen" || name === "marker");
+  book.classList.toggle("drawing", name !== "flip");
+  book.classList.remove("tool-pen", "tool-marker", "tool-eraser");
+  if (name !== "flip") book.classList.add("tool-" + name);
+  applyToolToCurrent();
+}
+
+function undoLast() {
+  const layer = currentLayer();
+  if (!layer || !layer._items.length) return;
+  layer._items.pop();
+  persistLayer(layer);
+  renderAnnot(layer);
+}
+
+async function addFreePage() {
+  const n = (cache.get("journal:freePages") ?? 1) + 1;
+  cache.set("journal:freePages", n);
+  await rebuild(true);
+  current = pagesEls.length - 1;
+  showStatic(current);
+  updateChrome();
+  flash("Добавлен чистый лист");
+}
+
+function bindTools() {
+  document.querySelectorAll(".tool[data-tool]").forEach((b) => {
+    b.addEventListener("click", () => setTool(b.dataset.tool));
+  });
+  const colors = document.getElementById("tool-colors");
+  MARKER_COLORS.forEach((c, i) => {
+    const s = document.createElement("button");
+    s.className = "swatch" + (i === 0 ? " active" : "");
+    s.style.background = c;
+    s.title = "Цвет";
+    s.addEventListener("click", () => {
+      currentColor = c;
+      colors.querySelectorAll(".swatch").forEach((x) => x.classList.remove("active"));
+      s.classList.add("active");
+    });
+    colors.appendChild(s);
+  });
+  document.getElementById("tool-undo").addEventListener("click", undoLast);
+  document.getElementById("tool-addpage").addEventListener("click", addFreePage);
+}
+
 /* ------------------------------------------------------------------ boot */
 
 async function rebuild(keepPosition) {
@@ -764,9 +1095,17 @@ async function rebuild(keepPosition) {
   const contentPages = paginate(entries);
 
   pagesEls = [buildCover(contentPages.length)];
+  let pageNo = 0;
   contentPages.forEach((blocks, i) => {
-    pagesEls.push(buildContentPage(blocks, i + 1, contentPages.length));
+    pageNo += 1;
+    pagesEls.push(buildContentPage(blocks, pageNo, "page-" + (i + 1)));
   });
+
+  const freeCount = cache.get("journal:freePages") ?? 1;
+  for (let k = 1; k <= freeCount; k++) {
+    pageNo += 1;
+    pagesEls.push(buildFreePage(k, pageNo));
+  }
 
   current = keepPosition ? Math.min(prevIndex, pagesEls.length - 1) : 0;
   buildProgress();
@@ -781,6 +1120,7 @@ async function init() {
   }
   bindInput();
   bindComposer();
+  bindTools();
   await rebuild(false);
 }
 

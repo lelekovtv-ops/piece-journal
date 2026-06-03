@@ -24,7 +24,22 @@ No backend, no build step, no secrets. Pure static site.
 The site auto-detects the owner/repo from the `*.github.io` URL — no config to
 edit. (To point it at a different repo, fill `MANUAL` at the top of `app.js`.)
 
-## Writing an entry
+## Writing & drawing by hand (directly on the page)
+
+The tool tray (bottom-left) turns the notebook into a real pad:
+
+- **Листать** — flip pages (default).
+- **Перо** — click anywhere on a page and write by hand right there; text snaps
+  to the ruled lines. Click an existing note to edit it.
+- **Фломастер** — draw freehand: circle a word, underline, scribble. Pick one of
+  five colors.
+- **Ластик** — remove a note or a stroke.
+- **↶** undo the last mark · **＋** add a fresh blank page to write on.
+
+Hand-written marks are saved per page in your browser (`localStorage`) — they
+stay on this device. Typed entries (below) are the shared, committed journal.
+
+## Writing an entry (typed, shareable)
 
 ### The easy way (in the notebook)
 
